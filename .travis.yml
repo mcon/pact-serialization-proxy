@@ -8,8 +8,9 @@ go:
  - release
  - tip
 
+# Looks like dep isn't in the zenial PPAs
 before_install:
-  - sudo apt-get install go-dep
+  - curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
 
 script:
  - make test
