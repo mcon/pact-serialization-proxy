@@ -8,7 +8,7 @@ build: fetch_deps
 
 .PHONY: fetch_deps
 fetch_deps:
-	dep ensure
+	dep ensure -v
 
 .PHONY: run
 run: fetch_deps
