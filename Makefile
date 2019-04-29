@@ -4,7 +4,7 @@ test: fetch_deps
 
 .PHONY: build
 build: fetch_deps
-	go build -v cmd/proxy-server/*
+	go build -v github.com/mcon/pact-serialization-proxy/cmd/proxy-server
 
 .PHONY: fetch_deps
 fetch_deps:
