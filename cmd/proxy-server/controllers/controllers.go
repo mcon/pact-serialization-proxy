@@ -15,10 +15,8 @@ import (
 	"github.com/mcon/pact-serialization-proxy/cmd/proxy-server/state"
 )
 
-func HandleInteractionsDelete(c *gin.Context) {
-	state.UrlResponseProtoMap = make(map[string]*gabs.Container)
-
-	reqUrl, err := url.Parse(c.Request.URL.Path)
+func passThrough(c *gin.Context) (*http.Response, error) {
+	reqUrl, err := url.Parse(state.ParsedArgs.RubyCoreUrl + c.Request.URL.Path)
 	req := &http.Request{
 		URL:    reqUrl,
 		Method: c.Request.Method,
@@ -27,9 +25,21 @@ func HandleInteractionsDelete(c *gin.Context) {
 	response, err := http.DefaultClient.Do(req)
 	if err != nil {
 		c.Abort()
-		return
+		return nil, err
 	}
 
+	return response, nil
+}
+
+func HandleInteractionsDelete(c *gin.Context) {
+	state.UrlResponseProtoMap = make(map[string]*gabs.Container)
+
+	response, _ := passThrough(c)
+
+	resp := new(bytes.Buffer)
+	resp.ReadFrom(response.Body)
+	c.Writer.WriteString(resp.String())
+	c.Status(response.StatusCode)
 	for k, vArr := range response.Header {
 		for _, v := range vArr {
 			c.Writer.Header().Add(k, v)
@@ -38,18 +48,12 @@ func HandleInteractionsDelete(c *gin.Context) {
 }
 
 func HandleGetVerification(c *gin.Context) {
-	reqUrl, err := url.Parse(c.Request.URL.Path)
-	req := &http.Request{
-		URL:    reqUrl,
-		Method: c.Request.Method,
-		Header: c.Request.Header,
-		Body:   c.Request.Body}
-	response, err := http.DefaultClient.Do(req)
-	if err != nil {
-		c.Abort()
-		return
-	}
+	response, _ := passThrough(c)
 
+	resp := new(bytes.Buffer)
+	resp.ReadFrom(response.Body)
+	c.Writer.WriteString(resp.String())
+	c.Status(response.StatusCode)
 	for k, vArr := range response.Header {
 		for _, v := range vArr {
 			c.Writer.Header().Add(k, v)
@@ -58,10 +62,7 @@ func HandleGetVerification(c *gin.Context) {
 }
 
 func HandleInteractions(c *gin.Context) {
-	reqHdrs := c.Request.Header
-	fmt.Println(reqHdrs)
-
-	reqUrl, err := url.Parse(state.RubyCoreUrl + c.Request.URL.Path)
+	reqUrl, err := url.Parse(state.ParsedArgs.RubyCoreUrl + c.Request.URL.Path)
 	jsonBytes, err := ioutil.ReadAll(c.Request.Body)
 
 	reader := bytes.NewBuffer(jsonBytes)
@@ -92,10 +93,7 @@ func HandleInteractions(c *gin.Context) {
 }
 
 func HandleDynamicEndpoints(c *gin.Context) {
-	// c.JSON(200, gin.H{
-	// 	"message": "wohooooo",
-	// })
-	ul, err := url.ParseRequestURI(state.RubyCoreUrl + c.Request.URL.Path)
+	ul, err := url.ParseRequestURI(state.ParsedArgs.RubyCoreUrl + c.Request.URL.Path)
 	if err != nil {
 		c.Abort()
 	}
@@ -154,5 +152,67 @@ func HandleDynamicEndpoints(c *gin.Context) {
 }
 
 func WritePactToFile(c *gin.Context) {
-	// Call mock service, also save our pact output with additional bits in it when we receive response.
+	response, err := passThrough(c)
+	if err != nil {
+		c.AbortWithError(500, err)
+		return
+	}
+
+	data, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		c.AbortWithError(500, err)
+		return
+	}
+
+	jsonParsed, err := gabs.ParseJSON(data)
+	if err != nil {
+		c.AbortWithError(500, err)
+		return
+	}
+
+	interactions := jsonParsed.Path("interactions")
+	interactions_children, err := interactions.Children()
+	if err != nil {
+		c.AbortWithError(500, err)
+		return
+	}
+
+	for _, child := range interactions_children {
+		path := child.Path("request.path").Data().(string)
+
+		// TODO: A single path could have many different binary encodings (e.g. 400 could return different data structure to 200) - also, request/response different too
+		pathSerialization := state.UrlResponseProtoMap[path]
+		if pathSerialization != nil {
+			encoding := pathSerialization.Path("response.encoding")
+			child, err = child.SetP(encoding.Data(), "response.encoding")
+			if err != nil {
+				c.AbortWithError(500, err)
+				return
+			}
+		}
+	}
+
+	jsonParsed.Delete("interactions")
+	jsonParsed.Array("interactions")
+	for _, child := range interactions_children {
+		err = jsonParsed.ArrayAppend(child.Data(), "interactions")
+	}
+	if err != nil {
+		c.AbortWithError(500, err)
+		return
+	}
+
+	consumer_name := jsonParsed.Path("consumer.name").Data().(string)
+
+	outputted_json := jsonParsed.EncodeJSON()
+	fmt.Println(jsonParsed)
+	fileDest := state.ParsedArgs.PactDir + consumer_name + ".proto.json"
+	fmt.Println(fileDest)
+	err = ioutil.WriteFile(fileDest, outputted_json, 0777)
+	if err != nil {
+		c.AbortWithError(500, err)
+		return
+	}
+
+	c.Data(200, "application/json", outputted_json)
 }

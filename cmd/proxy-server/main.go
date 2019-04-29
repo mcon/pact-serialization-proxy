@@ -9,16 +9,12 @@ import (
 	"github.com/mkideal/cli"
 )
 
-//sd
-// TODO 1: Commit this to a repo
-// TODO 2: Clean up validation logic, factor out into files, and add tests
 // TODO 3: Add ability to read and write pact files
 // TODO 4: Hack up the ability to act in mock verification
 
 func main() {
 	cli.Run(state.ParsedArgs, func(ctx *cli.Context) error {
-		argv := ctx.Argv().(*state.CliArgs)
-		ctx.String("%s\n", argv.PactDir)
+		state.ParsedArgs = ctx.Argv().(*state.CliArgs)
 		runWebHost()
 		return nil
 	})
