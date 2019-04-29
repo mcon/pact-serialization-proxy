@@ -1,8 +1,12 @@
 package main
 
 import (
+	"fmt"
+
 	"github.com/gin-gonic/gin"
 	"github.com/mcon/pact-serialization-proxy/cmd/proxy-server/controllers"
+	"github.com/mcon/pact-serialization-proxy/cmd/proxy-server/state"
+	"github.com/mkideal/cli"
 )
 
 //sd
@@ -12,7 +16,12 @@ import (
 // TODO 4: Hack up the ability to act in mock verification
 
 func main() {
-	runWebHost()
+	cli.Run(state.ParsedArgs, func(ctx *cli.Context) error {
+		argv := ctx.Argv().(*state.CliArgs)
+		ctx.String("%s\n", argv.PactDir)
+		runWebHost()
+		return nil
+	})
 }
 
 func runWebHost() {
@@ -22,5 +31,5 @@ func runWebHost() {
 	r.POST("/interactions", controllers.HandleInteractions)
 	r.POST("/pact", controllers.WritePactToFile)
 	r.NoRoute(controllers.HandleDynamicEndpoints)
-	r.Run() // listen and serve on 0.0.0.0:8080
+	r.Run(fmt.Sprintf("%s:%d", state.ParsedArgs.Host, state.ParsedArgs.Port))
 }
