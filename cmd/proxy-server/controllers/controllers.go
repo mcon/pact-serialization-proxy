@@ -1,4 +1,4 @@
-package main
+package controllers
 
 import (
 	"bytes"
@@ -11,10 +11,12 @@ import (
 	"github.com/Jeffail/gabs"
 	"github.com/gin-gonic/gin"
 	"github.com/jhump/protoreflect/dynamic"
+	"github.com/mcon/pact-serialization-proxy/cmd/proxy-server/descriptorlogic"
+	"github.com/mcon/pact-serialization-proxy/cmd/proxy-server/state"
 )
 
-func handleInteractionsDelete(c *gin.Context) {
-	urlResponseProtoMap = make(map[string]*gabs.Container)
+func HandleInteractionsDelete(c *gin.Context) {
+	state.UrlResponseProtoMap = make(map[string]*gabs.Container)
 
 	reqUrl, err := url.Parse(c.Request.URL.Path)
 	req := &http.Request{
@@ -35,7 +37,7 @@ func handleInteractionsDelete(c *gin.Context) {
 	}
 }
 
-func handleGetVerification(c *gin.Context) {
+func HandleGetVerification(c *gin.Context) {
 	reqUrl, err := url.Parse(c.Request.URL.Path)
 	req := &http.Request{
 		URL:    reqUrl,
@@ -55,11 +57,11 @@ func handleGetVerification(c *gin.Context) {
 	}
 }
 
-func handleInteractions(c *gin.Context) {
+func HandleInteractions(c *gin.Context) {
 	reqHdrs := c.Request.Header
 	fmt.Println(reqHdrs)
 
-	reqUrl, err := url.Parse(RubyCoreUrl + c.Request.URL.Path)
+	reqUrl, err := url.Parse(state.RubyCoreUrl + c.Request.URL.Path)
 	jsonBytes, err := ioutil.ReadAll(c.Request.Body)
 
 	reader := bytes.NewBuffer(jsonBytes)
@@ -74,11 +76,11 @@ func handleInteractions(c *gin.Context) {
 
 	jsonParsed, err := gabs.ParseJSON(jsonBytes)
 
-	lock.Lock()
-	defer lock.Unlock()
+	state.Lock.Lock()
+	defer state.Lock.Unlock()
 	path, ok := jsonParsed.Path("request.path").Data().(string)
 	fmt.Println("Added path: " + path)
-	urlResponseProtoMap[path] = jsonParsed
+	state.UrlResponseProtoMap[path] = jsonParsed
 
 	fmt.Println(ok)
 	fmt.Println(err)
@@ -89,11 +91,11 @@ func handleInteractions(c *gin.Context) {
 	c.Writer.WriteString(resp.String())
 }
 
-func handleDynamicEndpoints(c *gin.Context) {
+func HandleDynamicEndpoints(c *gin.Context) {
 	// c.JSON(200, gin.H{
 	// 	"message": "wohooooo",
 	// })
-	ul, err := url.ParseRequestURI(RubyCoreUrl + c.Request.URL.Path)
+	ul, err := url.ParseRequestURI(state.RubyCoreUrl + c.Request.URL.Path)
 	if err != nil {
 		c.Abort()
 	}
@@ -115,13 +117,13 @@ func handleDynamicEndpoints(c *gin.Context) {
 		return
 	}
 
-	lookedupInteraction := urlResponseProtoMap[c.Request.URL.Path]
+	lookedupInteraction := state.UrlResponseProtoMap[c.Request.URL.Path]
 	responseJson, err := ioutil.ReadAll(response.Body)
 	if err != nil {
 		c.AbortWithError(500, err)
 		return
 	}
-	msgDescriptor, err := getMessageDescriptorFromBody(lookedupInteraction)
+	msgDescriptor, err := descriptorlogic.GetMessageDescriptorFromBody(lookedupInteraction)
 	if err != nil {
 		c.AbortWithError(500, err)
 		return
@@ -149,4 +151,8 @@ func handleDynamicEndpoints(c *gin.Context) {
 
 	c.DataFromReader(response.StatusCode, response.ContentLength,
 		"application/json", response.Body, map[string]string{})
+}
+
+func WritePactToFile(c *gin.Context) {
+	// Call mock service, also save our pact output with additional bits in it when we receive response.
 }

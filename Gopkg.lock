@@ -2,6 +2,12 @@
 
 
 [[projects]]
+  branch = "master"
+  name = "github.com/Bowery/prompt"
+  packages = ["."]
+  revision = "972d0ceb96f55132a1ba9714cb771ce19b3821ab"
+
+[[projects]]
   name = "github.com/Jeffail/gabs"
   packages = ["."]
   revision = "74ef14cf8f407ee3ca8ec01bb6f52d6104edea80"
@@ -38,10 +44,34 @@
   version = "v1.1.6"
 
 [[projects]]
+  name = "github.com/labstack/gommon"
+  packages = ["color"]
+  revision = "7fd9f68ece0bcb1a905fac8f1549f0083f71c51b"
+  version = "v0.2.8"
+
+[[projects]]
+  name = "github.com/mattn/go-colorable"
+  packages = ["."]
+  revision = "3a70a971f94a22f2fa562ffcc7a0eb45f5daf045"
+  version = "v0.1.1"
+
+[[projects]]
   name = "github.com/mattn/go-isatty"
   packages = ["."]
   revision = "c2a7a6ca930a4cd0bc33a3f298eb71960732a3a7"
   version = "v0.0.7"
+
+[[projects]]
+  name = "github.com/mkideal/cli"
+  packages = ["."]
+  revision = "a89c6c3b86c237e09ba35bd2343c5211b2552661"
+  version = "v0.0.2"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/mkideal/pkg"
+  packages = ["debug","expr"]
+  revision = "3e188c9e7ecc83d0fe7040a9161ce3c67885470d"
 
 [[projects]]
   name = "github.com/modern-go/concurrent"
@@ -82,6 +112,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "07894958d3266cc34eddeb6664c4f628c3f7468918f2c9d8e47b0e8cfe53fd7f"
+  inputs-digest = "b2f5af149776b151c70e034d65253e406181071e1ec07e326ba5e911fe872756"
   solver-name = "gps-cdcl"
   solver-version = 1
