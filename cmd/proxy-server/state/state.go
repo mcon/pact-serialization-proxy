@@ -14,6 +14,7 @@ type CliArgs struct {
 	LogDir      string `cli:"log-dir" usage:"directory to store process log: --log-dir <directory>"`
 	Port        int    `cli:"*port" usage:"port on which to run the server: --port <port>"`
 	Host        string `cli:"host" usage:"host name on which to run the server: --pact-dir <directory>" dft:"localhost"`
+	// TODO: Should make this "OutputUrl", as it's not the ruby core when doing verification.
 	RubyCoreUrl string `cli:"*ruby-core-url" usage:"URL where the Ruby core is running --ruby-core-url <url>"`
 	// TODO: Should add support for SSL
 }

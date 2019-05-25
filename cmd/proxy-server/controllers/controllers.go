@@ -3,7 +3,9 @@ package controllers
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"io/ioutil"
+	"strings"
 
 	"net/http"
 	"net/url"
@@ -92,7 +94,74 @@ func HandleInteractions(c *gin.Context) {
 	c.Writer.WriteString(resp.String())
 }
 
+func HandleVerificationDynamicEndpoints(c *gin.Context) {
+	// TODO: Support custom serialization of request body
+	reqBody, err := ioutil.ReadAll(c.Request.Body)
+	if err != nil {
+		c.Abort()
+	}
+	ul, err := url.ParseRequestURI(state.ParsedArgs.RubyCoreUrl + strings.TrimLeft(c.Request.URL.Path, "/"))
+	if err != nil {
+		c.Abort()
+	}
+	reader := bytes.NewBuffer(reqBody)
+	requestBody := ioutil.NopCloser(reader)
+
+	req := &http.Request{
+		URL:    ul,
+		Method: c.Request.Method,
+		Header: c.Request.Header,
+		Body:   requestBody}
+	response, err := http.DefaultClient.Do(req)
+	responseReader := response.Body.(io.Reader)
+	contentLength := response.ContentLength
+
+	fmt.Println(c.Request.URL.Path)
+	fmt.Println(state.UrlResponseProtoMap)
+	lookedupInteraction := state.UrlResponseProtoMap["/"+strings.TrimLeft(c.Request.URL.Path, "/")]
+	if lookedupInteraction != nil && lookedupInteraction.ExistsP("response.encoding") {
+		fmt.Println("Doing conversion to proto")
+		msgDescriptor, err := descriptorlogic.GetMessageDescriptorFromBody(lookedupInteraction)
+		if err != nil {
+			c.AbortWithError(500, err)
+			return
+		}
+
+		responseBody, err := ioutil.ReadAll(response.Body)
+		if err != nil {
+			c.AbortWithError(500, err)
+			return
+		}
+
+		protoMessage := dynamic.NewMessage(msgDescriptor)
+		protoMessage.Unmarshal(responseBody)
+
+		encoded, err := protoMessage.MarshalJSONIndent()
+		if err != nil {
+			c.AbortWithError(500, err)
+			return
+		}
+		responseReader = bytes.NewReader(encoded)
+		fmt.Println("Encoded contents:")
+		fmt.Println(encoded)
+		fmt.Println(len(encoded))
+		contentLength = int64(cap(encoded))
+	}
+
+	// TODO: For all headers that aren't Content-Length
+	// for k, vArr := range response.Header {
+	// 	for _, v := range vArr {
+	// 		c.Writer.Header().Add(k, v)
+	// 	}
+	// }
+
+	// c.Writer.Header().Add("Content-Length", string(contentLength))
+	c.DataFromReader(response.StatusCode, contentLength, // TODO: Fix content length problem :(
+		strings.Join(response.Header["Content-Type"], "; "), responseReader, map[string]string{})
+}
+
 func HandleDynamicEndpoints(c *gin.Context) {
+	// TODO: Support custom serialization of request body
 	ul, err := url.ParseRequestURI(state.ParsedArgs.RubyCoreUrl + c.Request.URL.Path)
 	if err != nil {
 		c.Abort()
