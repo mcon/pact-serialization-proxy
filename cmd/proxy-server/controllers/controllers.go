@@ -100,7 +100,7 @@ func HandleVerificationDynamicEndpoints(c *gin.Context) {
 	if err != nil {
 		c.Abort()
 	}
-	ul, err := url.ParseRequestURI(state.ParsedArgs.RubyCoreUrl + strings.TrimLeft(c.Request.URL.Path, "/"))
+	ul, err := url.ParseRequestURI(state.ParsedArgs.RubyCoreUrl + strings.TrimLeft(c.Request.URL.RequestURI(), "/"))
 	if err != nil {
 		c.Abort()
 	}
@@ -148,12 +148,14 @@ func HandleVerificationDynamicEndpoints(c *gin.Context) {
 		contentLength = int64(cap(encoded))
 	}
 
-	// TODO: For all headers that aren't Content-Length
-	// for k, vArr := range response.Header {
-	// 	for _, v := range vArr {
-	// 		c.Writer.Header().Add(k, v)
-	// 	}
-	// }
+	for k, vArr := range response.Header {
+		// ContentLength is set by DataFromReader below, and gin doesn't support overwritingof header values.
+		if k != "content-length" {
+			for _, v := range vArr {
+				c.Writer.Header().Add(k, v)
+			}
+		}
+	}
 
 	// c.Writer.Header().Add("Content-Length", string(contentLength))
 	c.DataFromReader(response.StatusCode, contentLength, // TODO: Fix content length problem :(
