@@ -149,13 +149,13 @@ func HandleVerificationDynamicEndpoints(c *gin.Context) {
 	}
 
 	for k, vArr := range response.Header {
-		// ContentLength is set by DataFromReader below, and gin doesn't support overwritingof header values.
-		if k != "content-length" {
-			for _, v := range vArr {
-				c.Writer.Header().Add(k, v)
-			}
+		for _, v := range vArr {
+			c.Writer.Header().Add(k, v)
 		}
 	}
+
+	// ContentLength is set by DataFromReader below, and gin doesn't support overwritingof header values.
+	c.Writer.Header().Del("content-length")
 
 	c.DataFromReader(response.StatusCode, contentLength,
 		strings.Join(response.Header["Content-Type"], "; "), responseReader, map[string]string{})
