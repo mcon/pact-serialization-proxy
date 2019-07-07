@@ -157,8 +157,7 @@ func HandleVerificationDynamicEndpoints(c *gin.Context) {
 		}
 	}
 
-	// c.Writer.Header().Add("Content-Length", string(contentLength))
-	c.DataFromReader(response.StatusCode, contentLength, // TODO: Fix content length problem :(
+	c.DataFromReader(response.StatusCode, contentLength,
 		strings.Join(response.Header["Content-Type"], "; "), responseReader, map[string]string{})
 }
 
@@ -197,17 +196,13 @@ func HandleDynamicEndpoints(c *gin.Context) {
 		c.AbortWithError(500, err)
 		return
 	}
-	protoMessage := dynamic.NewMessage(msgDescriptor)
-	decodedJson, _ := gabs.ParseJSON(responseJson)
-	fmt.Println(decodedJson)
-	protoMessage.UnmarshalJSON(responseJson)
 
-	protoJsonRep, err := protoMessage.Marshal()
+	protoJsonResp, err := descriptorlogic.JsonBytesToProtobufBytes(responseJson, msgDescriptor)
 	if err != nil {
 		c.AbortWithError(500, err)
 		return
 	}
-	c.Data(200, "application/octet-stream", protoJsonRep)
+	c.Data(200, "application/octet-stream", protoJsonResp)
 
 	// TODO: If encoding.type exists and is "protobuf" then enforce that route is a key
 	// in the map - then try serialization.
