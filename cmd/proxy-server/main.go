@@ -12,16 +12,15 @@ import (
 	"github.com/mkideal/cli"
 )
 
-// TODO 3: Add ability to read and write pact files
-// TODO 4: Hack up the ability to act in mock verification
-
 func main() {
 	cli.Run(state.ParsedArgs, func(ctx *cli.Context) error {
 		state.ParsedArgs = ctx.Argv().(*state.CliArgs)
 		if state.ParsedArgs.Verificaion {
 			loadInteractionsFromPactFile()
 		}
-		runWebHost()
+
+		deps := controllers.RealDependencies()
+		SetupRouter(deps).Run(fmt.Sprintf("%s:%d", state.ParsedArgs.Host, state.ParsedArgs.Port))
 		return nil
 	})
 }
@@ -52,16 +51,16 @@ func loadInteractionsFromPactFile() {
 	}
 }
 
-func runWebHost() {
+func SetupRouter(deps *controllers.Dependencies) *gin.Engine {
 	r := gin.Default()
-	r.DELETE("/interactions", controllers.HandleInteractionsDelete)
-	r.GET("/interactions/verification", controllers.HandleGetVerification)
-	r.POST("/interactions", controllers.HandleInteractions)
-	r.POST("/pact", controllers.WritePactToFile)
+	r.DELETE("/interactions", deps.HandleInteractionsDelete)
+	r.GET("/interactions/verification", deps.HandleGetVerification)
+	r.POST("/interactions", deps.HandleInteractions)
+	r.POST("/pact", deps.WritePactToFile)
 	if state.ParsedArgs.Verificaion {
-		r.NoRoute(controllers.HandleVerificationDynamicEndpoints)
+		r.NoRoute(deps.HandleVerificationDynamicEndpoints)
 	} else {
-		r.NoRoute(controllers.HandleDynamicEndpoints)
+		r.NoRoute(deps.HandleDynamicEndpoints)
 	}
-	r.Run(fmt.Sprintf("%s:%d", state.ParsedArgs.Host, state.ParsedArgs.Port))
+	return r
 }

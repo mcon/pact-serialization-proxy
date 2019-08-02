@@ -17,14 +17,28 @@ import (
 	"github.com/mcon/pact-serialization-proxy/cmd/proxy-server/state"
 )
 
-func passThrough(c *gin.Context) (*http.Response, error) {
+type Dependencies struct {
+	HttpClient IHttpClient
+}
+
+func RealDependencies() *Dependencies {
+	return &Dependencies{
+		HttpClient: http.DefaultClient,
+	}
+}
+
+type IHttpClient interface {
+	Do(req *http.Request) (*http.Response, error)
+}
+
+func passThrough(c *gin.Context, deps *Dependencies) (*http.Response, error) {
 	reqUrl, err := url.Parse(state.ParsedArgs.RubyCoreUrl + c.Request.URL.Path)
 	req := &http.Request{
 		URL:    reqUrl,
 		Method: c.Request.Method,
 		Header: c.Request.Header,
 		Body:   c.Request.Body}
-	response, err := http.DefaultClient.Do(req)
+	response, err := deps.HttpClient.Do(req)
 	if err != nil {
 		c.Abort()
 		return nil, err
@@ -33,10 +47,10 @@ func passThrough(c *gin.Context) (*http.Response, error) {
 	return response, nil
 }
 
-func HandleInteractionsDelete(c *gin.Context) {
+func (deps *Dependencies) HandleInteractionsDelete(c *gin.Context) {
 	state.UrlResponseProtoMap = make(map[string]*gabs.Container)
 
-	response, _ := passThrough(c)
+	response, _ := passThrough(c, deps)
 
 	resp := new(bytes.Buffer)
 	resp.ReadFrom(response.Body)
@@ -49,8 +63,8 @@ func HandleInteractionsDelete(c *gin.Context) {
 	}
 }
 
-func HandleGetVerification(c *gin.Context) {
-	response, _ := passThrough(c)
+func (deps *Dependencies) HandleGetVerification(c *gin.Context) {
+	response, _ := passThrough(c, deps)
 
 	resp := new(bytes.Buffer)
 	resp.ReadFrom(response.Body)
@@ -63,7 +77,7 @@ func HandleGetVerification(c *gin.Context) {
 	}
 }
 
-func HandleInteractions(c *gin.Context) {
+func (deps *Dependencies) HandleInteractions(c *gin.Context) {
 	reqUrl, err := url.Parse(state.ParsedArgs.RubyCoreUrl + c.Request.URL.Path)
 	jsonBytes, err := ioutil.ReadAll(c.Request.Body)
 
@@ -75,7 +89,7 @@ func HandleInteractions(c *gin.Context) {
 		Method: "POST",
 		Header: c.Request.Header,
 		Body:   requestBody}
-	response, err := http.DefaultClient.Do(req)
+	response, err := deps.HttpClient.Do(req)
 
 	jsonParsed, err := gabs.ParseJSON(jsonBytes)
 
@@ -94,7 +108,7 @@ func HandleInteractions(c *gin.Context) {
 	c.Writer.WriteString(resp.String())
 }
 
-func HandleVerificationDynamicEndpoints(c *gin.Context) {
+func (deps *Dependencies) HandleVerificationDynamicEndpoints(c *gin.Context) {
 	// TODO: Support custom serialization of request body
 	reqBody, err := ioutil.ReadAll(c.Request.Body)
 	if err != nil {
@@ -112,7 +126,7 @@ func HandleVerificationDynamicEndpoints(c *gin.Context) {
 		Method: c.Request.Method,
 		Header: c.Request.Header,
 		Body:   requestBody}
-	response, err := http.DefaultClient.Do(req)
+	response, err := deps.HttpClient.Do(req)
 	responseReader := response.Body.(io.Reader)
 	contentLength := response.ContentLength
 
@@ -161,7 +175,7 @@ func HandleVerificationDynamicEndpoints(c *gin.Context) {
 		strings.Join(response.Header["Content-Type"], "; "), responseReader, map[string]string{})
 }
 
-func HandleDynamicEndpoints(c *gin.Context) {
+func (deps *Dependencies) HandleDynamicEndpoints(c *gin.Context) {
 	// TODO: Support custom serialization of request body
 	ul, err := url.ParseRequestURI(state.ParsedArgs.RubyCoreUrl + c.Request.URL.Path)
 	if err != nil {
@@ -179,7 +193,7 @@ func HandleDynamicEndpoints(c *gin.Context) {
 		Method: c.Request.Method,
 		Header: c.Request.Header,
 		Body:   requestBody}
-	response, err := http.DefaultClient.Do(req)
+	response, err := deps.HttpClient.Do(req)
 	if err != nil {
 		c.Abort()
 		return
@@ -217,8 +231,8 @@ func HandleDynamicEndpoints(c *gin.Context) {
 		"application/json", response.Body, map[string]string{})
 }
 
-func WritePactToFile(c *gin.Context) {
-	response, err := passThrough(c)
+func (deps *Dependencies) WritePactToFile(c *gin.Context) {
+	response, err := passThrough(c, deps)
 	if err != nil {
 		c.AbortWithError(500, err)
 		return
