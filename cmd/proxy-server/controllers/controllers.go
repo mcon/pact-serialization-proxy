@@ -202,18 +202,18 @@ func (deps *Dependencies) HandleDynamicEndpoints(c *gin.Context) {
 	lookedupInteraction := state.UrlResponseProtoMap[c.Request.URL.Path]
 	responseJson, err := ioutil.ReadAll(response.Body)
 	if err != nil {
-		c.AbortWithError(500, err)
+		_ = c.AbortWithError(500, err)
 		return
 	}
 	msgDescriptor, err := descriptorlogic.GetMessageDescriptorFromBody(lookedupInteraction)
 	if err != nil {
-		c.AbortWithError(500, err)
+		_ = c.AbortWithError(500, err)
 		return
 	}
 
 	protoJsonResp, err := descriptorlogic.JsonBytesToProtobufBytes(responseJson, msgDescriptor)
 	if err != nil {
-		c.AbortWithError(500, err)
+		_ = c.AbortWithError(500, err)
 		return
 	}
 	c.Data(200, "application/octet-stream", protoJsonResp)
@@ -234,26 +234,26 @@ func (deps *Dependencies) HandleDynamicEndpoints(c *gin.Context) {
 func (deps *Dependencies) WritePactToFile(c *gin.Context) {
 	response, err := passThrough(c, deps)
 	if err != nil {
-		c.AbortWithError(500, err)
+		_ = c.AbortWithError(500, err)
 		return
 	}
 
 	data, err := ioutil.ReadAll(response.Body)
 	if err != nil {
-		c.AbortWithError(500, err)
+		_ = c.AbortWithError(500, err)
 		return
 	}
 
 	jsonParsed, err := gabs.ParseJSON(data)
 	if err != nil {
-		c.AbortWithError(500, err)
+		_ = c.AbortWithError(500, err)
 		return
 	}
 
 	interactions := jsonParsed.Path("interactions")
 	interactions_children, err := interactions.Children()
 	if err != nil {
-		c.AbortWithError(500, err)
+		_ = c.AbortWithError(500, err)
 		return
 	}
 
@@ -266,7 +266,7 @@ func (deps *Dependencies) WritePactToFile(c *gin.Context) {
 			encoding := pathSerialization.Path("response.encoding")
 			child, err = child.SetP(encoding.Data(), "response.encoding")
 			if err != nil {
-				c.AbortWithError(500, err)
+				_ = c.AbortWithError(500, err)
 				return
 			}
 		}
@@ -278,7 +278,7 @@ func (deps *Dependencies) WritePactToFile(c *gin.Context) {
 		err = jsonParsed.ArrayAppend(child.Data(), "interactions")
 	}
 	if err != nil {
-		c.AbortWithError(500, err)
+		_ = c.AbortWithError(500, err)
 		return
 	}
 
@@ -290,7 +290,7 @@ func (deps *Dependencies) WritePactToFile(c *gin.Context) {
 	fmt.Println(fileDest)
 	err = ioutil.WriteFile(fileDest, outputted_json, 0777)
 	if err != nil {
-		c.AbortWithError(500, err)
+		_ = c.AbortWithError(500, err)
 		return
 	}
 
