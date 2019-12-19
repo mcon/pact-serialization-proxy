@@ -22,8 +22,7 @@ func main() {
 		}
 
 		deps := controllers.RealDependencies()
-		SetupRouter(deps).Run(fmt.Sprintf("%s:%d", state.ParsedArgs.Host, state.ParsedArgs.Port))
-		return nil
+		return SetupRouter(deps).Run(fmt.Sprintf("%s:%d", state.ParsedArgs.Host, state.ParsedArgs.Port))
 	})
 }
 
@@ -58,5 +57,14 @@ func SetupRouter(deps *controllers.Dependencies) *gin.Engine {
 	// TODO: Need to support provider states - this will entail performing some matching on the request in order to work
 	// out which registered interaction a request made by the application under test pertains to (given the serialization
 	// for different interactions for a given endpoint may vary).
+	// TODO: Currently match statements are not supported: match statements mutate the body of the ServiceProviderRequest
+	// and at present the body is deserialized directly - this isn't an insurmountable problem if we demand that the
+	// serialization for a given endpoint is determined, for provider verification by (method * path * providerState).
+	// The Ruby core gets the providerState from the environment, maybe we should do the same.
+	// TODO: To handle match statements on the consumer-contract-creation-side, we don't know the request serialization,
+	// and so we should assume that's going to be the same for all requests. Response serialization can be determined
+	// by the status code returned by the Ruby core (as the core is actually capable of properly matching requests
+	// to their corresponding interactions).
+
 	return r
 }

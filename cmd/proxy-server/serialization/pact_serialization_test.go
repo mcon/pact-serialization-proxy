@@ -1,22 +1,21 @@
-package pactContractHandler
+package serialization
 
 import (
 	"encoding/json"
-	"github.com/mcon/pact-serialization-proxy/cmd/proxy-server/serialization"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )
 
 // TODO: Add Description and ProviderState to this test
 func TestCheckSerializationMatchesPactCore(t *testing.T) {
-	expected_data_structure := &serialization.ProviderServiceInteraction{
-		Request: serialization.ProviderServiceRequest{
+	expected_data_structure := &ProviderServiceInteraction{
+		Request: ProviderServiceRequest{
 			Method: "POST",
 			Path:   "foo/bar",
 			Query:  "?number=1",
-			Encoding: serialization.SerializationEncoding{
+			Encoding: SerializationEncoding{
 				Type: "protobuf",
-				Description: &serialization.ProtobufEncodingDescription{
+				Description: &ProtobufEncodingDescription{
 					MessageName:       "BarRequestMessage",
 					FileDescriptorSet: []float64{1, 2, 3},
 				},
@@ -24,11 +23,11 @@ func TestCheckSerializationMatchesPactCore(t *testing.T) {
 			Headers: map[string]string{"Accept": "application/octet-stream"},
 			Body:    "{\"Key\" : \"Value\"}",
 		},
-		Response: serialization.ProviderServiceResponse{
+		Response: ProviderServiceResponse{
 			Status: 200,
-			Encoding: serialization.SerializationEncoding{
+			Encoding: SerializationEncoding{
 				Type: "protobuf",
-				Description: &serialization.ProtobufEncodingDescription{
+				Description: &ProtobufEncodingDescription{
 					MessageName:       "BarResponseMessage",
 					FileDescriptorSet: []float64{4, 5, 6},
 				},
@@ -78,7 +77,7 @@ func TestCheckSerializationMatchesPactCore(t *testing.T) {
         "Body": ""
     }
 }`
-	var unmarshalled_interaction = new(serialization.ProviderServiceInteraction)
+	var unmarshalled_interaction = new(ProviderServiceInteraction)
 	e := json.Unmarshal([]byte(json_under_test), unmarshalled_interaction)
 	assert.Nil(t, e, "Unmarshaling JSON should succeed")
 

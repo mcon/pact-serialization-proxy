@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/mcon/pact-serialization-proxy/cmd/proxy-server/domain"
+	"github.com/mcon/pact-serialization-proxy/cmd/proxy-server/pactContractHandler"
 	"github.com/mcon/pact-serialization-proxy/cmd/proxy-server/serialization"
 	"io"
 	"io/ioutil"
@@ -334,15 +335,7 @@ func (deps *Dependencies) writePactToFileInner(c *gin.Context) error {
 		return err
 	}
 
-	for _, contractChildInteraction := range contract.Interactions {
-		lookupKey := domain.CreateUniqueInteractionIdentifierFromInteraction(&contractChildInteraction)
-		// TODO: A single path could have many different binary encodings (e.g. 400 could return different data structure to 200) - also, request/response different too
-		locallyRecordedInteraction, success := state.UrlResponseProtoMap.Get(lookupKey)
-		if success {
-			contractChildInteraction.Response.Encoding = locallyRecordedInteraction.Response.Encoding
-			contractChildInteraction.Request.Encoding = locallyRecordedInteraction.Request.Encoding
-		}
-	}
+	pactContractHandler.PopulateContractFromInteractions(&contract, state.UrlResponseProtoMap)
 
 	outputtedJson, err := json.Marshal(contract)
 	if err != nil {
