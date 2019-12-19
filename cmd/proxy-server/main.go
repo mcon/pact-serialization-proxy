@@ -10,24 +10,27 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/mcon/pact-serialization-proxy/cmd/proxy-server/controllers"
-	"github.com/mcon/pact-serialization-proxy/cmd/proxy-server/state"
 	"github.com/mkideal/cli"
 )
 
+// Global application state
+var ParsedArgs = new(domain.CliArgs)
+var UrlResponseProtoMap = domain.InteractionLookup{}
+
 func main() {
-	cli.Run(state.ParsedArgs, func(ctx *cli.Context) error {
-		state.ParsedArgs = ctx.Argv().(*state.CliArgs)
-		if state.ParsedArgs.Verificaion {
+	cli.Run(ParsedArgs, func(ctx *cli.Context) error {
+		ParsedArgs = ctx.Argv().(*domain.CliArgs)
+		if ParsedArgs.Verificaion {
 			loadInteractionsFromPactFile()
 		}
 
-		deps := controllers.RealDependencies()
-		return SetupRouter(deps).Run(fmt.Sprintf("%s:%d", state.ParsedArgs.Host, state.ParsedArgs.Port))
+		deps := controllers.RealDependencies(ParsedArgs)
+		return SetupRouter(deps).Run(fmt.Sprintf("%s:%d", ParsedArgs.Host, ParsedArgs.Port))
 	})
 }
 
 func loadInteractionsFromPactFile() {
-	dat, err := ioutil.ReadFile(state.ParsedArgs.PactDir)
+	dat, err := ioutil.ReadFile(ParsedArgs.PactDir)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
@@ -40,7 +43,7 @@ func loadInteractionsFromPactFile() {
 		os.Exit(1)
 	}
 
-	state.UrlResponseProtoMap = domain.CreateInteractionLookupFromContract(&pactContract)
+	UrlResponseProtoMap = domain.CreateInteractionLookupFromContract(&pactContract)
 }
 
 func SetupRouter(deps *controllers.Dependencies) *gin.Engine {
@@ -49,7 +52,7 @@ func SetupRouter(deps *controllers.Dependencies) *gin.Engine {
 	r.GET("/interactions/verification", deps.HandleGetVerification)
 	r.POST("/interactions", deps.HandleInteractionAdd)
 	r.POST("/pact", deps.WritePactToFile)
-	if state.ParsedArgs.Verificaion {
+	if ParsedArgs.Verificaion {
 		r.NoRoute(deps.HandleVerificationDynamicEndpoints)
 	} else {
 		r.NoRoute(deps.HandleDynamicEndpoints)

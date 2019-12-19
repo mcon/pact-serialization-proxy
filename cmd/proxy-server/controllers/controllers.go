@@ -19,19 +19,23 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jhump/protoreflect/dynamic"
 	"github.com/mcon/pact-serialization-proxy/cmd/proxy-server/descriptorlogic"
-	"github.com/mcon/pact-serialization-proxy/cmd/proxy-server/state"
 )
 
+// Mimic a dependency-injected controller setup to allow for testing.
 type fileWriter func(filename string, data []byte, perm os.FileMode) error
 type Dependencies struct {
-	HttpClient IHttpClient
-	FileWriter fileWriter
+	HttpClient        IHttpClient
+	FileWriter        fileWriter
+	InteractionLookup domain.InteractionLookup
+	CliArgs           *domain.CliArgs
 }
 
-func RealDependencies() *Dependencies {
+func RealDependencies(args *domain.CliArgs) *Dependencies {
 	return &Dependencies{
-		HttpClient: http.DefaultClient,
-		FileWriter: ioutil.WriteFile,
+		HttpClient:        http.DefaultClient,
+		FileWriter:        ioutil.WriteFile,
+		InteractionLookup: domain.CreateEmptyInteractionLookup(),
+		CliArgs:           args,
 	}
 }
 
@@ -40,7 +44,7 @@ type IHttpClient interface {
 }
 
 func passThrough(c *gin.Context, deps *Dependencies) (*http.Response, error) {
-	reqUrl, err := url.Parse(state.ParsedArgs.RubyCoreUrl + c.Request.URL.Path)
+	reqUrl, err := url.Parse(deps.CliArgs.RubyCoreUrl + c.Request.URL.Path)
 	req := &http.Request{
 		URL:    reqUrl,
 		Method: c.Request.Method,
@@ -56,7 +60,7 @@ func passThrough(c *gin.Context, deps *Dependencies) (*http.Response, error) {
 }
 
 func (deps *Dependencies) handleInteractionDeleteInner(c *gin.Context) error {
-	state.UrlResponseProtoMap = domain.CreateEmptyInteractionLookup()
+	deps.InteractionLookup = domain.CreateEmptyInteractionLookup()
 
 	response, _ := passThrough(c, deps)
 
@@ -113,7 +117,7 @@ func (deps *Dependencies) HandleGetVerification(c *gin.Context) {
 	}
 }
 func (deps *Dependencies) handleInteractionAddInner(c *gin.Context) error {
-	reqUrl, err := url.Parse(state.ParsedArgs.RubyCoreUrl + c.Request.URL.Path)
+	reqUrl, err := url.Parse(deps.CliArgs.RubyCoreUrl + c.Request.URL.Path)
 	if err != nil {
 		return err
 	}
@@ -141,7 +145,7 @@ func (deps *Dependencies) handleInteractionAddInner(c *gin.Context) error {
 	}
 
 	urlIdentifier := domain.CreateUniqueInteractionIdentifierFromInteraction(unmarshalledInteraction)
-	err = state.UrlResponseProtoMap.Set(urlIdentifier, unmarshalledInteraction)
+	err = deps.InteractionLookup.Set(urlIdentifier, unmarshalledInteraction)
 	if err != nil {
 		return err
 	}
@@ -171,7 +175,7 @@ func (deps *Dependencies) handleVerificationDynamicEndpointsInner(c *gin.Context
 	if err != nil {
 		return err
 	}
-	ul, err := url.ParseRequestURI(state.ParsedArgs.RubyCoreUrl + strings.TrimLeft(c.Request.URL.RequestURI(), "/"))
+	ul, err := url.ParseRequestURI(deps.CliArgs.RubyCoreUrl + strings.TrimLeft(c.Request.URL.RequestURI(), "/"))
 	if err != nil {
 		return err
 	}
@@ -191,12 +195,12 @@ func (deps *Dependencies) handleVerificationDynamicEndpointsInner(c *gin.Context
 	contentLength := response.ContentLength
 
 	fmt.Println(c.Request.URL.Path)
-	fmt.Println(state.UrlResponseProtoMap)
+	fmt.Println(deps.InteractionLookup)
 	interactionKey := domain.CreateUniqueInteractionIdentifier(
 		c.Request.Method,
 		"/"+strings.TrimLeft(c.Request.URL.Path, "/"),
 		c.Request.URL.RawQuery)
-	lookedUpInteraction, success := state.UrlResponseProtoMap.Get(interactionKey)
+	lookedUpInteraction, success := deps.InteractionLookup.Get(interactionKey)
 	if !success {
 		return errors.New(fmt.Sprintf("Failed to look up interaction: %T", lookedUpInteraction))
 	}
@@ -251,7 +255,7 @@ func (deps *Dependencies) HandleVerificationDynamicEndpoints(c *gin.Context) {
 }
 
 func (deps *Dependencies) handleDynamicEndpointsInner(c *gin.Context) error {
-	ul, err := url.ParseRequestURI(state.ParsedArgs.RubyCoreUrl + c.Request.URL.Path)
+	ul, err := url.ParseRequestURI(deps.CliArgs.RubyCoreUrl + c.Request.URL.Path)
 	if err != nil {
 		return err
 	}
@@ -276,7 +280,7 @@ func (deps *Dependencies) handleDynamicEndpointsInner(c *gin.Context) error {
 		c.Request.Method,
 		c.Request.URL.Path,
 		c.Request.URL.RawQuery)
-	lookedUpInteraction, success := state.UrlResponseProtoMap.Get(interactionKey)
+	lookedUpInteraction, success := deps.InteractionLookup.Get(interactionKey)
 	if !success {
 		return errors.New(fmt.Sprintf("Failed to look up interaction: %T", lookedUpInteraction))
 	}
@@ -335,7 +339,7 @@ func (deps *Dependencies) writePactToFileInner(c *gin.Context) error {
 		return err
 	}
 
-	pactContractHandler.PopulateContractFromInteractions(&contract, state.UrlResponseProtoMap)
+	pactContractHandler.PopulateContractFromInteractions(&contract, deps.InteractionLookup)
 
 	outputtedJson, err := json.Marshal(contract)
 	if err != nil {
@@ -343,7 +347,7 @@ func (deps *Dependencies) writePactToFileInner(c *gin.Context) error {
 	}
 	// TODO: This is sensitive to there being a trailing '/' at the end of the PactDir, but otherwise *should* work on
 	// both unix and Windows
-	fileDest := state.ParsedArgs.PactDir + contract.Consumer + ".proto.json"
+	fileDest := deps.CliArgs.PactDir + contract.Consumer + ".proto.json"
 	_, err = fmt.Printf("Writing pact file to %s\n", fileDest)
 	if err != nil {
 		return err
