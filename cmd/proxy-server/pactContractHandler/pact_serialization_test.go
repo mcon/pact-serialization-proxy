@@ -7,6 +7,7 @@ import (
 	"testing"
 )
 
+// TODO: Add Description and ProviderState to this test
 func TestCheckSerializationMatchesPactCore(t *testing.T) {
 	expected_data_structure := &serialization.ProviderServiceInteraction{
 		Request: serialization.ProviderServiceRequest{

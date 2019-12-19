@@ -3,45 +3,40 @@ package descriptorlogic
 import (
 	"errors"
 	"fmt"
+	"github.com/mcon/pact-serialization-proxy/cmd/proxy-server/serialization"
 
-	"github.com/Jeffail/gabs"
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/protoc-gen-go/descriptor"
 	"github.com/jhump/protoreflect/desc"
 )
 
-func GetMessageDescriptorFromBody(interaction *gabs.Container) (messageDescriptor *desc.MessageDescriptor, err error) {
-	fmt.Println(interaction)
-	fdcContainer := interaction.Path("response.encoding.description.fileDescriptorSet")
-	fmt.Println(fdcContainer)
-	fdcBytes := make([]byte, 0, 100000)
+func GetMessageDescriptorFromBody(encoding *serialization.SerializationEncoding, path string) (messageDescriptor *desc.MessageDescriptor, err error) {
+	fmt.Println(encoding)
 
-	fmt.Println(fdcContainer.String())
-	children, _ := fdcContainer.Children()
-	for _, child := range children {
-		floatRepr := child.Data().(float64)
-		fdcBytes = append(fdcBytes, byte(floatRepr))
+	fileDescriptorSetBytes := make([]byte, 0, 100000)
+	for _, child := range encoding.Description.FileDescriptorSet {
+		fileDescriptorSetBytes = append(fileDescriptorSetBytes, byte(child))
 	}
 
-	fdc := &descriptor.FileDescriptorSet{}
-	err = proto.Unmarshal(fdcBytes, fdc)
+	fileDescriptorSet := &descriptor.FileDescriptorSet{}
+
+	err = proto.Unmarshal(fileDescriptorSetBytes, fileDescriptorSet)
 	if err != nil {
 		return nil, err
 	}
 
-	var d *desc.FileDescriptor
-	d, err = desc.CreateFileDescriptorFromSet(fdc)
+	var fileDescriptor *desc.FileDescriptor
+	fileDescriptor, err = desc.CreateFileDescriptorFromSet(fileDescriptorSet)
 	if err != nil {
 		return nil, err
 	}
 
-	messages := d.GetMessageTypes()
+	messages := fileDescriptor.GetMessageTypes()
 	for _, msg := range messages {
-		fmt.Println(msg.GetName(), interaction.Path("response.encoding.description.messageName").Data().(string))
-		if msg.GetName() == interaction.Path("response.encoding.description.messageName").Data().(string) {
+		fmt.Println(msg.GetName(), encoding.Description.MessageName)
+		if msg.GetName() == encoding.Description.MessageName {
 			return msg, nil
 		}
 	}
-	return nil, errors.New("Expected route was not found in interactions: " + interaction.Path("request.path").String())
-	//dynamic.Message
+	return nil, errors.New("Expected route was not found in interactions: " + path)
 }

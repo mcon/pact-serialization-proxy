@@ -1,9 +1,7 @@
 package state
 
 import (
-	"sync"
-
-	"github.com/Jeffail/gabs"
+	"github.com/mcon/pact-serialization-proxy/cmd/proxy-server/domain"
 	"github.com/mkideal/cli"
 )
 
@@ -21,5 +19,4 @@ type CliArgs struct {
 
 var ParsedArgs = new(CliArgs)
 
-var UrlResponseProtoMap = map[string]*gabs.Container{}
-var Lock = sync.Mutex{}
+var UrlResponseProtoMap = domain.InteractionLookup{}

@@ -29,6 +29,19 @@ type ProviderServiceResponse struct {
 }
 
 type ProviderServiceInteraction struct {
-	Request  ProviderServiceRequest
-	Response ProviderServiceResponse
+	Description   string
+	ProviderState string
+	Request       ProviderServiceRequest
+	Response      ProviderServiceResponse
+}
+
+type PactContractMetadata struct {
+	PactSpecificationVersion string
+}
+
+type PactContract struct {
+	Consumer     string
+	Provider     string
+	Interactions []ProviderServiceInteraction
+	Metadata     PactContractMetadata
 }

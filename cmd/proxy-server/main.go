@@ -1,11 +1,13 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"github.com/mcon/pact-serialization-proxy/cmd/proxy-server/domain"
+	"github.com/mcon/pact-serialization-proxy/cmd/proxy-server/serialization"
 	"io/ioutil"
 	"os"
 
-	"github.com/Jeffail/gabs"
 	"github.com/gin-gonic/gin"
 	"github.com/mcon/pact-serialization-proxy/cmd/proxy-server/controllers"
 	"github.com/mcon/pact-serialization-proxy/cmd/proxy-server/state"
@@ -32,35 +34,29 @@ func loadInteractionsFromPactFile() {
 		os.Exit(1)
 	}
 
-	json, err := gabs.ParseJSON(dat)
+	pactContract := serialization.PactContract{}
+	err = json.Unmarshal(dat, pactContract)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
 
-	interactions := json.Path("interactions")
-	fmt.Println(interactions)
-
-	children, err := interactions.Children()
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
-	for _, child := range children {
-		state.UrlResponseProtoMap[child.Path("request.path").Data().(string)] = child
-	}
+	state.UrlResponseProtoMap = domain.CreateInteractionLookupFromContract(&pactContract)
 }
 
 func SetupRouter(deps *controllers.Dependencies) *gin.Engine {
 	r := gin.Default()
-	r.DELETE("/interactions", deps.HandleInteractionsDelete)
+	r.DELETE("/interactions", deps.HandleInteractionDelete)
 	r.GET("/interactions/verification", deps.HandleGetVerification)
-	r.POST("/interactions", deps.HandleInteractions)
+	r.POST("/interactions", deps.HandleInteractionAdd)
 	r.POST("/pact", deps.WritePactToFile)
 	if state.ParsedArgs.Verificaion {
 		r.NoRoute(deps.HandleVerificationDynamicEndpoints)
 	} else {
 		r.NoRoute(deps.HandleDynamicEndpoints)
 	}
+	// TODO: Need to support provider states - this will entail performing some matching on the request in order to work
+	// out which registered interaction a request made by the application under test pertains to (given the serialization
+	// for different interactions for a given endpoint may vary).
 	return r
 }

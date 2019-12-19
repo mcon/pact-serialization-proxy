@@ -2,28 +2,35 @@ package controllers
 
 import (
 	"bytes"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"github.com/mcon/pact-serialization-proxy/cmd/proxy-server/domain"
+	"github.com/mcon/pact-serialization-proxy/cmd/proxy-server/serialization"
 	"io"
 	"io/ioutil"
+	"os"
 	"strings"
 
 	"net/http"
 	"net/url"
 
-	"github.com/Jeffail/gabs"
 	"github.com/gin-gonic/gin"
 	"github.com/jhump/protoreflect/dynamic"
 	"github.com/mcon/pact-serialization-proxy/cmd/proxy-server/descriptorlogic"
 	"github.com/mcon/pact-serialization-proxy/cmd/proxy-server/state"
 )
 
+type fileWriter func(filename string, data []byte, perm os.FileMode) error
 type Dependencies struct {
 	HttpClient IHttpClient
+	FileWriter fileWriter
 }
 
 func RealDependencies() *Dependencies {
 	return &Dependencies{
 		HttpClient: http.DefaultClient,
+		FileWriter: ioutil.WriteFile,
 	}
 }
 
@@ -47,76 +54,125 @@ func passThrough(c *gin.Context, deps *Dependencies) (*http.Response, error) {
 	return response, nil
 }
 
-func (deps *Dependencies) HandleInteractionsDelete(c *gin.Context) {
-	state.UrlResponseProtoMap = make(map[string]*gabs.Container)
+func (deps *Dependencies) handleInteractionDeleteInner(c *gin.Context) error {
+	state.UrlResponseProtoMap = domain.CreateEmptyInteractionLookup()
 
 	response, _ := passThrough(c, deps)
 
 	resp := new(bytes.Buffer)
-	resp.ReadFrom(response.Body)
-	c.Writer.WriteString(resp.String())
+	_, err := resp.ReadFrom(response.Body)
+	if err != nil {
+		return err
+	}
+	_, err = c.Writer.WriteString(resp.String())
+	if err != nil {
+		return err
+	}
 	c.Status(response.StatusCode)
 	for k, vArr := range response.Header {
 		for _, v := range vArr {
 			c.Writer.Header().Add(k, v)
 		}
 	}
+	return nil
+}
+
+func (deps *Dependencies) HandleInteractionDelete(c *gin.Context) {
+	err := deps.handleInteractionDeleteInner(c)
+	if err != nil {
+		_ = c.AbortWithError(500, err)
+	}
+}
+
+func (deps *Dependencies) handleGetVerificationInner(c *gin.Context) error {
+	response, _ := passThrough(c, deps)
+
+	resp := new(bytes.Buffer)
+	_, err := resp.ReadFrom(response.Body)
+	if err != nil {
+		return err
+	}
+	_, err = c.Writer.WriteString(resp.String())
+	if err != nil {
+		return err
+	}
+	c.Status(response.StatusCode)
+	for k, vArr := range response.Header {
+		for _, v := range vArr {
+			c.Writer.Header().Add(k, v)
+		}
+	}
+	return nil
 }
 
 func (deps *Dependencies) HandleGetVerification(c *gin.Context) {
-	response, _ := passThrough(c, deps)
-
-	resp := new(bytes.Buffer)
-	resp.ReadFrom(response.Body)
-	c.Writer.WriteString(resp.String())
-	c.Status(response.StatusCode)
-	for k, vArr := range response.Header {
-		for _, v := range vArr {
-			c.Writer.Header().Add(k, v)
-		}
+	err := deps.handleGetVerificationInner(c)
+	if err != nil {
+		_ = c.AbortWithError(500, err)
 	}
 }
-
-func (deps *Dependencies) HandleInteractions(c *gin.Context) {
+func (deps *Dependencies) handleInteractionAddInner(c *gin.Context) error {
 	reqUrl, err := url.Parse(state.ParsedArgs.RubyCoreUrl + c.Request.URL.Path)
+	if err != nil {
+		return err
+	}
 	jsonBytes, err := ioutil.ReadAll(c.Request.Body)
+	if err != nil {
+		return err
+	}
 
 	reader := bytes.NewBuffer(jsonBytes)
 	requestBody := ioutil.NopCloser(reader)
-	fmt.Println(err)
 	req := &http.Request{
 		URL:    reqUrl,
 		Method: "POST",
 		Header: c.Request.Header,
 		Body:   requestBody}
 	response, err := deps.HttpClient.Do(req)
+	if err != nil {
+		return err
+	}
 
-	jsonParsed, err := gabs.ParseJSON(jsonBytes)
+	var unmarshalledInteraction = new(serialization.ProviderServiceInteraction)
+	err = json.Unmarshal(jsonBytes, unmarshalledInteraction)
+	if err != nil {
+		return err
+	}
 
-	state.Lock.Lock()
-	defer state.Lock.Unlock()
-	path, ok := jsonParsed.Path("request.path").Data().(string)
-	fmt.Println("Added path: " + path)
-	state.UrlResponseProtoMap[path] = jsonParsed
-
-	fmt.Println(ok)
-	fmt.Println(err)
+	urlIdentifier := domain.CreateUniqueInteractionIdentifierFromInteraction(unmarshalledInteraction)
+	err = state.UrlResponseProtoMap.Set(urlIdentifier, unmarshalledInteraction)
+	if err != nil {
+		return err
+	}
 
 	resp := new(bytes.Buffer)
-	resp.ReadFrom(response.Body)
-
-	c.Writer.WriteString(resp.String())
+	_, err = resp.ReadFrom(response.Body)
+	if err != nil {
+		return err
+	}
+	_, err = c.Writer.WriteString(resp.String())
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
-func (deps *Dependencies) HandleVerificationDynamicEndpoints(c *gin.Context) {
+func (deps *Dependencies) HandleInteractionAdd(c *gin.Context) {
+	err := deps.handleInteractionAddInner(c)
+	if err != nil {
+		_ = c.AbortWithError(500, err)
+	}
+}
+
+func (deps *Dependencies) handleVerificationDynamicEndpointsInner(c *gin.Context) error {
 	// TODO: Support custom serialization of request body
 	reqBody, err := ioutil.ReadAll(c.Request.Body)
 	if err != nil {
-		c.Abort()
+		return err
 	}
 	ul, err := url.ParseRequestURI(state.ParsedArgs.RubyCoreUrl + strings.TrimLeft(c.Request.URL.RequestURI(), "/"))
 	if err != nil {
-		c.Abort()
+		return err
 	}
 	reader := bytes.NewBuffer(reqBody)
 	requestBody := ioutil.NopCloser(reader)
@@ -127,33 +183,43 @@ func (deps *Dependencies) HandleVerificationDynamicEndpoints(c *gin.Context) {
 		Header: c.Request.Header,
 		Body:   requestBody}
 	response, err := deps.HttpClient.Do(req)
+	if err != nil {
+		return err
+	}
 	responseReader := response.Body.(io.Reader)
 	contentLength := response.ContentLength
 
 	fmt.Println(c.Request.URL.Path)
 	fmt.Println(state.UrlResponseProtoMap)
-	lookedupInteraction := state.UrlResponseProtoMap["/"+strings.TrimLeft(c.Request.URL.Path, "/")]
-	if lookedupInteraction != nil && lookedupInteraction.ExistsP("response.encoding") {
+	interactionKey := domain.CreateUniqueInteractionIdentifier(
+		c.Request.Method,
+		"/"+strings.TrimLeft(c.Request.URL.Path, "/"),
+		c.Request.URL.RawQuery)
+	lookedUpInteraction, success := state.UrlResponseProtoMap.Get(interactionKey)
+	if !success {
+		return errors.New(fmt.Sprintf("Failed to look up interaction: %T", lookedUpInteraction))
+	}
+	if lookedUpInteraction.Response.Encoding.Type == "protobuf" {
 		fmt.Println("Doing conversion to proto")
-		msgDescriptor, err := descriptorlogic.GetMessageDescriptorFromBody(lookedupInteraction)
+		msgDescriptor, err := descriptorlogic.GetMessageDescriptorFromBody(&lookedUpInteraction.Response.Encoding, c.Request.URL.Path)
 		if err != nil {
-			c.AbortWithError(500, err)
-			return
+			return err
 		}
 
 		responseBody, err := ioutil.ReadAll(response.Body)
 		if err != nil {
-			c.AbortWithError(500, err)
-			return
+			return err
 		}
 
 		protoMessage := dynamic.NewMessage(msgDescriptor)
-		protoMessage.Unmarshal(responseBody)
+		err = protoMessage.Unmarshal(responseBody)
+		if err != nil {
+			return err
+		}
 
 		encoded, err := protoMessage.MarshalJSONIndent()
 		if err != nil {
-			c.AbortWithError(500, err)
-			return
+			return err
 		}
 		responseReader = bytes.NewReader(encoded)
 		fmt.Println("Encoded contents:")
@@ -173,17 +239,24 @@ func (deps *Dependencies) HandleVerificationDynamicEndpoints(c *gin.Context) {
 
 	c.DataFromReader(response.StatusCode, contentLength,
 		strings.Join(response.Header["Content-Type"], "; "), responseReader, map[string]string{})
+	return nil
 }
 
-func (deps *Dependencies) HandleDynamicEndpoints(c *gin.Context) {
-	// TODO: Support custom serialization of request body
+func (deps *Dependencies) HandleVerificationDynamicEndpoints(c *gin.Context) {
+	err := deps.handleVerificationDynamicEndpointsInner(c)
+	if err != nil {
+		_ = c.AbortWithError(500, err)
+	}
+}
+
+func (deps *Dependencies) handleDynamicEndpointsInner(c *gin.Context) error {
 	ul, err := url.ParseRequestURI(state.ParsedArgs.RubyCoreUrl + c.Request.URL.Path)
 	if err != nil {
-		c.Abort()
+		return err
 	}
 	jsonBytes, err := ioutil.ReadAll(c.Request.Body)
 	if err != nil {
-		c.Abort()
+		return err
 	}
 	reader := bytes.NewBuffer(jsonBytes)
 	requestBody := ioutil.NopCloser(reader)
@@ -195,26 +268,29 @@ func (deps *Dependencies) HandleDynamicEndpoints(c *gin.Context) {
 		Body:   requestBody}
 	response, err := deps.HttpClient.Do(req)
 	if err != nil {
-		c.Abort()
-		return
+		return err
 	}
 
-	lookedupInteraction := state.UrlResponseProtoMap[c.Request.URL.Path]
+	interactionKey := domain.CreateUniqueInteractionIdentifier(
+		c.Request.Method,
+		c.Request.URL.Path,
+		c.Request.URL.RawQuery)
+	lookedUpInteraction, success := state.UrlResponseProtoMap.Get(interactionKey)
+	if !success {
+		return errors.New(fmt.Sprintf("Failed to look up interaction: %T", lookedUpInteraction))
+	}
 	responseJson, err := ioutil.ReadAll(response.Body)
 	if err != nil {
-		_ = c.AbortWithError(500, err)
-		return
+		return err
 	}
-	msgDescriptor, err := descriptorlogic.GetMessageDescriptorFromBody(lookedupInteraction)
+	msgDescriptor, err := descriptorlogic.GetMessageDescriptorFromBody(&lookedUpInteraction.Response.Encoding, c.Request.URL.Path)
 	if err != nil {
-		_ = c.AbortWithError(500, err)
-		return
+		return err
 	}
 
 	protoJsonResp, err := descriptorlogic.JsonBytesToProtobufBytes(responseJson, msgDescriptor)
 	if err != nil {
-		_ = c.AbortWithError(500, err)
-		return
+		return err
 	}
 	c.Data(200, "application/octet-stream", protoJsonResp)
 
@@ -229,70 +305,68 @@ func (deps *Dependencies) HandleDynamicEndpoints(c *gin.Context) {
 
 	c.DataFromReader(response.StatusCode, response.ContentLength,
 		"application/json", response.Body, map[string]string{})
+	return nil
 }
 
-func (deps *Dependencies) WritePactToFile(c *gin.Context) {
-	response, err := passThrough(c, deps)
+func (deps *Dependencies) HandleDynamicEndpoints(c *gin.Context) {
+	// TODO: Support custom serialization of request body
+	err := deps.handleDynamicEndpointsInner(c)
 	if err != nil {
 		_ = c.AbortWithError(500, err)
-		return
+	}
+}
+
+func (deps *Dependencies) writePactToFileInner(c *gin.Context) error {
+	response, err := passThrough(c, deps)
+	if err != nil {
+		return err
 	}
 
 	data, err := ioutil.ReadAll(response.Body)
 	if err != nil {
-		_ = c.AbortWithError(500, err)
-		return
+		return err
 	}
 
-	jsonParsed, err := gabs.ParseJSON(data)
+	// Note: the Pact core is ignorant of the `Encoding` fields, and so these are looked up in our interaction map
+	contract := serialization.PactContract{}
+	err = json.Unmarshal(data, contract)
 	if err != nil {
-		_ = c.AbortWithError(500, err)
-		return
+		return err
 	}
 
-	interactions := jsonParsed.Path("interactions")
-	interactions_children, err := interactions.Children()
-	if err != nil {
-		_ = c.AbortWithError(500, err)
-		return
-	}
-
-	for _, child := range interactions_children {
-		path := child.Path("request.path").Data().(string)
-
+	for _, contractChildInteraction := range contract.Interactions {
+		lookupKey := domain.CreateUniqueInteractionIdentifierFromInteraction(&contractChildInteraction)
 		// TODO: A single path could have many different binary encodings (e.g. 400 could return different data structure to 200) - also, request/response different too
-		pathSerialization := state.UrlResponseProtoMap[path]
-		if pathSerialization != nil {
-			encoding := pathSerialization.Path("response.encoding")
-			child, err = child.SetP(encoding.Data(), "response.encoding")
-			if err != nil {
-				_ = c.AbortWithError(500, err)
-				return
-			}
+		locallyRecordedInteraction, success := state.UrlResponseProtoMap.Get(lookupKey)
+		if success {
+			contractChildInteraction.Response.Encoding = locallyRecordedInteraction.Response.Encoding
+			contractChildInteraction.Request.Encoding = locallyRecordedInteraction.Request.Encoding
 		}
 	}
 
-	jsonParsed.Delete("interactions")
-	jsonParsed.Array("interactions")
-	for _, child := range interactions_children {
-		err = jsonParsed.ArrayAppend(child.Data(), "interactions")
+	outputtedJson, err := json.Marshal(contract)
+	if err != nil {
+		return err
 	}
+	// TODO: This is sensitive to there being a trailing '/' at the end of the PactDir, but otherwise *should* work on
+	// both unix and Windows
+	fileDest := state.ParsedArgs.PactDir + contract.Consumer + ".proto.json"
+	_, err = fmt.Printf("Writing pact file to %s\n", fileDest)
+	if err != nil {
+		return err
+	}
+	err = deps.FileWriter(fileDest, outputtedJson, 0777)
+	if err != nil {
+		return err
+	}
+
+	c.Data(200, "application/json", outputtedJson)
+	return nil
+}
+
+func (deps *Dependencies) WritePactToFile(c *gin.Context) {
+	err := deps.writePactToFileInner(c)
 	if err != nil {
 		_ = c.AbortWithError(500, err)
-		return
 	}
-
-	consumer_name := jsonParsed.Path("consumer.name").Data().(string)
-
-	outputted_json := jsonParsed.EncodeJSON()
-	fmt.Println(jsonParsed)
-	fileDest := state.ParsedArgs.PactDir + consumer_name + ".proto.json"
-	fmt.Println(fileDest)
-	err = ioutil.WriteFile(fileDest, outputted_json, 0777)
-	if err != nil {
-		_ = c.AbortWithError(500, err)
-		return
-	}
-
-	c.Data(200, "application/json", outputted_json)
 }
