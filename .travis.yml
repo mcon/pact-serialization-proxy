@@ -9,17 +9,18 @@ go:
 before_install:
   - curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
 
-
+script:
+  - make test
+  - make build
 
 # TODO: do non-draft releases and cross-platform releases
 jobs:
  include:
-  - script:
-    - make test
-    - make build
   - stage: deploy
     script: ls; pwd
     go: 1.10.3
+    before_deploy:
+      - make build
     deploy:
      provider: releases
      api_key: $RELEASES_TOKEN
