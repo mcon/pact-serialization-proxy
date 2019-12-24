@@ -19,7 +19,6 @@ jobs:
   - stage: deploy
     go: 1.10.3
     before_deploy:
-      - make build
       - ls; pwd
     deploy:
      provider: releases
@@ -28,4 +27,4 @@ jobs:
      on:
       branch: master
      file:
-      - proxy-server
+      - "proxy-server"
