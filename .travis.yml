@@ -21,6 +21,5 @@ deploy:
  prerelease: true
  on:
   branch: master
-  go: 1.10.3
  file:
   - proxy-server
