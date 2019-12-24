@@ -3,7 +3,8 @@ dist: xenial
 language: go
 go:
  - 1.10.3
- - tip
+ allow_failures:
+  - tip
 
 # Looks like 'dep' isn't in the zenial PPAs
 before_install:
@@ -13,12 +14,13 @@ script:
  - make test
  - make build
 
-# TODO: do non-draft releases
+# TODO: do non-draft releases and cross-platform releases
 deploy:
  provider: releases
  api_key: $RELEASES_TOKEN
- draft: true
+ prerelease: true
  on:
   branch: master
+  go: 1.10.3
  file:
-  - cmd/proxy-server/proxy-server
+  - proxy-server
