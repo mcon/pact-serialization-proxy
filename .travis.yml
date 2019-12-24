@@ -24,6 +24,7 @@ jobs:
      provider: releases
      api_key: $RELEASES_TOKEN
      prerelease: true
+     skip_cleanup: true # Without this the build artifacts are cleaned up before deploy!
      on:
       branch: master
      file:
