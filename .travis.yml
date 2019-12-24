@@ -3,8 +3,7 @@ dist: xenial
 language: go
 go:
  - 1.10.3
- allow_failures:
-  - tip
+ - tip
 
 # Looks like 'dep' isn't in the zenial PPAs
 before_install:
