@@ -69,11 +69,11 @@ func (deps *Dependencies) handleInteractionDeleteInner(c *gin.Context) error {
 	if err != nil {
 		return err
 	}
+	c.Status(response.StatusCode)
 	_, err = c.Writer.WriteString(resp.String())
 	if err != nil {
 		return err
 	}
-	c.Status(response.StatusCode)
 	for k, vArr := range response.Header {
 		for _, v := range vArr {
 			c.Writer.Header().Add(k, v)
@@ -97,11 +97,13 @@ func (deps *Dependencies) handleGetVerificationInner(c *gin.Context) error {
 	if err != nil {
 		return err
 	}
+	c.Abort()
+	c.Status(response.StatusCode)
 	_, err = c.Writer.WriteString(resp.String())
 	if err != nil {
 		return err
 	}
-	c.Status(response.StatusCode)
+
 	for k, vArr := range response.Header {
 		for _, v := range vArr {
 			c.Writer.Header().Add(k, v)
@@ -169,6 +171,13 @@ func (deps *Dependencies) HandleInteractionAdd(c *gin.Context) {
 	}
 }
 
+func queryStringWithLeadingQuestionmark(queryString string) string {
+	if len(queryString) == 0 {
+		return queryString
+	}
+	return "?" + queryString
+}
+
 func (deps *Dependencies) handleVerificationDynamicEndpointsInner(c *gin.Context) error {
 	// TODO: Support custom serialization of request body
 	reqBody, err := ioutil.ReadAll(c.Request.Body)
@@ -199,10 +208,10 @@ func (deps *Dependencies) handleVerificationDynamicEndpointsInner(c *gin.Context
 	interactionKey := domain.CreateUniqueInteractionIdentifier(
 		c.Request.Method,
 		"/"+strings.TrimLeft(c.Request.URL.Path, "/"),
-		c.Request.URL.RawQuery)
+		queryStringWithLeadingQuestionmark(c.Request.URL.RawQuery))
 	lookedUpInteraction, success := deps.InteractionLookup.Get(interactionKey)
 	if !success {
-		return errors.New(fmt.Sprintf("Failed to look up interaction: %T", lookedUpInteraction))
+		return errors.New(fmt.Sprintf("Failed to look up interaction: %v", lookedUpInteraction))
 	}
 	if lookedUpInteraction.Response.Encoding.Type == "protobuf" {
 		fmt.Println("Doing conversion to proto")
@@ -279,28 +288,35 @@ func (deps *Dependencies) handleDynamicEndpointsInner(c *gin.Context) error {
 	interactionKey := domain.CreateUniqueInteractionIdentifier(
 		c.Request.Method,
 		c.Request.URL.Path,
-		c.Request.URL.RawQuery)
+		queryStringWithLeadingQuestionmark(c.Request.URL.RawQuery))
 	lookedUpInteraction, success := deps.InteractionLookup.Get(interactionKey)
 	if !success {
-		return errors.New(fmt.Sprintf("Failed to look up interaction: %T", lookedUpInteraction))
+		return errors.New(fmt.Sprintf("Failed to look up interaction: %v", interactionKey))
 	}
+
 	responseJson, err := ioutil.ReadAll(response.Body)
 	if err != nil {
 		return err
 	}
-	msgDescriptor, err := descriptorlogic.GetMessageDescriptorFromBody(&lookedUpInteraction.Response.Encoding, c.Request.URL.Path)
-	if err != nil {
-		return err
-	}
 
-	protoJsonResp, err := descriptorlogic.JsonBytesToProtobufBytes(responseJson, msgDescriptor)
-	if err != nil {
-		return err
-	}
-	c.Data(200, "application/octet-stream", protoJsonResp)
+	if lookedUpInteraction.Response.Encoding.Type == "protobuf" {
+		msgDescriptor, err := descriptorlogic.GetMessageDescriptorFromBody(&lookedUpInteraction.Response.Encoding, c.Request.URL.Path)
+		if err != nil {
+			return err
+		}
 
-	// TODO: If encoding.type exists and is "protobuf" then enforce that route is a key
-	// in the map - then try serialization.
+		protoJsonResp, err := descriptorlogic.JsonBytesToProtobufBytes(responseJson, msgDescriptor)
+		if err != nil {
+			return err
+		}
+		c.DataFromReader(
+			lookedUpInteraction.Response.Status, int64(len(protoJsonResp)), "application/octet-stream",
+			bytes.NewReader(protoJsonResp), map[string]string{})
+	} else {
+		c.DataFromReader(
+			lookedUpInteraction.Response.Status, int64(len(responseJson)), "application/json",
+			bytes.NewReader(responseJson), map[string]string{})
+	}
 
 	for k, vArr := range response.Header {
 		for _, v := range vArr {
@@ -334,7 +350,7 @@ func (deps *Dependencies) writePactToFileInner(c *gin.Context) error {
 
 	// Note: the Pact core is ignorant of the `Encoding` fields, and so these are looked up in our interaction map
 	contract := serialization.PactContract{}
-	err = json.Unmarshal(data, contract)
+	err = json.Unmarshal(data, &contract)
 	if err != nil {
 		return err
 	}

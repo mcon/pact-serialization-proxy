@@ -88,8 +88,8 @@ func TestSerializationRoundTrips(t *testing.T) {
 	marshaled, err := json.Marshal(expectedDataStructure)
 	assert.NoError(t, err, "Marshaling JSON should succeed")
 
-	var unmarshalledInteraction = new(ProviderServiceInteraction)
-	err = json.Unmarshal([]byte(marshaled), unmarshalledInteraction)
+	unmarshalledInteraction := new(ProviderServiceInteraction)
+	err = json.Unmarshal(marshaled, unmarshalledInteraction)
 	assert.NoError(t, err, "Unmarshaling JSON should succeed")
 
 	assert.Equal(t, expectedDataStructure, unmarshalledInteraction, "Expected DTO to round-trip")

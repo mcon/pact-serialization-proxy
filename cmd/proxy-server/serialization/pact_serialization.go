@@ -38,14 +38,14 @@ type ProviderServiceRequest struct {
 	Query    string
 	Encoding SerializationEncoding
 	Headers  map[string]string
-	Body     *PactRequestBody `json:"body,omitempty"`
+	Body     *PactRequestBody `json:",omitempty"`
 }
 
 type ProviderServiceResponse struct {
 	Status   int
 	Encoding SerializationEncoding
 	Headers  map[string]string
-	Body     *PactRequestBody `json:"body,omitempty"`
+	Body     *PactRequestBody `json:",omitempty"`
 }
 
 type ProviderServiceInteraction struct {

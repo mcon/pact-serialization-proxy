@@ -48,10 +48,10 @@ func loadInteractionsFromPactFile() {
 
 func SetupRouter(deps *controllers.Dependencies) *gin.Engine {
 	r := gin.Default()
-	r.DELETE("/interactions", deps.HandleInteractionDelete)
-	r.GET("/interactions/verification", deps.HandleGetVerification)
-	r.POST("/interactions", deps.HandleInteractionAdd)
-	r.POST("/pact", deps.WritePactToFile)
+	r.DELETE("interactions", deps.HandleInteractionDelete)
+	r.GET("interactions/verification", deps.HandleGetVerification)
+	r.POST("interactions", deps.HandleInteractionAdd)
+	r.POST("pact", deps.WritePactToFile)
 	if ParsedArgs.Verificaion {
 		r.NoRoute(deps.HandleVerificationDynamicEndpoints)
 	} else {

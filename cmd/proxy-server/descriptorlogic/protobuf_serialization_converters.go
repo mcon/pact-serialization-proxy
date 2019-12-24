@@ -5,12 +5,15 @@ import (
 	"github.com/jhump/protoreflect/dynamic"
 )
 
-func JsonBytesToProtobufBytes(jsonBytes []byte, messageDescriptor *desc.MessageDescriptor) (protobuf_byte []byte, err error) {
+func JsonBytesToProtobufBytes(jsonBytes []byte, messageDescriptor *desc.MessageDescriptor) ([]byte, error) {
 	protoMessage := dynamic.NewMessage(messageDescriptor)
 	// TODO: Add in debug logging of the decoded JSON
 	// decodedJson, _ := gabs.ParseJSON(jsonBytes)
 
-	protoMessage.UnmarshalJSON(jsonBytes)
+	err := protoMessage.UnmarshalJSON(jsonBytes)
+	if err != nil {
+		return nil, err
+	}
 
 	return protoMessage.Marshal()
 }
