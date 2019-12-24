@@ -14,11 +14,16 @@ script:
  - make build
 
 # TODO: do non-draft releases and cross-platform releases
-deploy:
- provider: releases
- api_key: $RELEASES_TOKEN
- prerelease: true
- on:
-  branch: master
- file:
-  - proxy-server
+jobs:
+ include:
+  - stage: deploy
+    script: ls; pwd
+    go: 1.10.3
+    deploy:
+     provider: releases
+     api_key: $RELEASES_TOKEN
+     prerelease: true
+     on:
+      branch: master
+     file:
+      - proxy-server
