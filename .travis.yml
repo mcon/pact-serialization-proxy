@@ -16,6 +16,7 @@ script:
 # TODO: do non-draft releases
 deploy:
  provider: releases
+ api_key: $RELEASES_TOKEN
  draft: true
  on:
   branch: master
