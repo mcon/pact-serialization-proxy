@@ -1,6 +1,6 @@
 # pact-serialization-proxy
 [![Build Status](https://travis-ci.org/mcon/pact-serialization-proxy.svg?branch=master)](https://travis-ci.org/mcon/pact-serialization-proxy)
-
+ 
 ## Motivation
 
 The Pact testing framework was designed with JSON over HTTP in mind - anyone using non-JSON encodings, and transports other than HTTP are unable to use Pact (with the exception of *message pacts* which are only suitable for async communication e.g. "put this thing on a queue for me" - even these *message pacts* often require use of JSON too).
