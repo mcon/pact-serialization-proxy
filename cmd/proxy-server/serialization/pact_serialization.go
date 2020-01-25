@@ -1,8 +1,10 @@
 package serialization
 
+import "encoding/json"
+
 type ProtobufEncodingDescription struct {
-	MessageName       string
-	FileDescriptorSet []float64
+	MessageName       string    `json:"messageName"`
+	FileDescriptorSet []float64 `json:"fileDescriptorSet"`
 }
 
 // In general, the contents of `Description` might be different based on the `Type` of the encoding:
@@ -32,36 +34,94 @@ func (body *PactRequestBody) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+type RegexMatcherDescription struct {
+	JsonClass string `json:"json_class"`
+	o         int32  // Pact-core specific fields not relevant to the serialization proxy
+	s         string
+}
+
+type RexexMatcher struct {
+	ExamplePath string                  `json:"generate"`
+	Matcher     RegexMatcherDescription `json:"matcher"`
+}
+
+type RegexedString struct {
+	JsonClass string        `json:"json_class,omitempty"`
+	Data      *RexexMatcher `json:"data,omitempty"`
+}
+
+// TODO: The 'WithRegex' case can only apply in the body of posting to '/interactions', sadly matching rules in
+// the pact contract follow a different form
+type PossiblyRegexedString struct {
+	NoRegex   string
+	WithRegex *RegexedString
+}
+
+func (x *PossiblyRegexedString) GetString() string {
+	if x.WithRegex == nil {
+		return x.NoRegex
+	}
+	return x.WithRegex.Data.ExamplePath
+}
+
+func (x *PossiblyRegexedString) MarshalJSON() ([]byte, error) {
+	if x.WithRegex != nil {
+		return json.Marshal(x.WithRegex)
+	}
+	return []byte("\"" + x.NoRegex + "\""), nil
+}
+
+func (x *PossiblyRegexedString) UnmarshalJSON(data []byte) error {
+	err := json.Unmarshal(data, &x.WithRegex)
+
+	// Assume that if we don't have a regex, then there's just a raw string
+	if err != nil {
+		x.NoRegex = string(data[1 : len(data)-1]) // Remove quotes around path
+		x.WithRegex = nil
+	}
+	return nil
+}
+
 type ProviderServiceRequest struct {
-	Method   string
-	Path     string
-	Query    string
-	Encoding SerializationEncoding
-	Headers  map[string]string
-	Body     *PactRequestBody `json:",omitempty"`
+	Method        string                 `json:"method"`
+	Path          *PossiblyRegexedString `json:"path"`
+	Query         *PossiblyRegexedString `json:"query,omitempty"`
+	Encoding      *SerializationEncoding `json:"encoding,omitempty"`
+	Headers       interface{}            `json:"headers,omitempty"`
+	Body          *PactRequestBody       `json:"body,omitempty"`
+	MatchingRules interface{}            `json:"matchingRules,omitempty"` // Only applies to pact contract
 }
 
 type ProviderServiceResponse struct {
-	Status   int
-	Encoding SerializationEncoding
-	Headers  map[string]string
-	Body     *PactRequestBody `json:",omitempty"`
+	Status        int                    `json:"status"`
+	Encoding      *SerializationEncoding `json:"encoding,omitempty"`
+	Headers       interface{}            `json:"headers,omitempty"`
+	Body          *PactRequestBody       `json:"body,omitempty"`
+	MatchingRules interface{}            `json:"matchingRules,omitempty"` // Only applies to pact contract
 }
 
 type ProviderServiceInteraction struct {
-	Description   string
-	ProviderState string
-	Request       ProviderServiceRequest
-	Response      ProviderServiceResponse
+	Description   string                  `json:"description"`
+	ProviderState string                  `json:"providerState"`
+	Request       ProviderServiceRequest  `json:"request"`
+	Response      ProviderServiceResponse `json:"response"`
+}
+
+type PactSpecificationDescription struct {
+	Version string `json:"version"`
 }
 
 type PactContractMetadata struct {
-	PactSpecificationVersion string
+	PactSpecification PactSpecificationDescription `json:"pactSpecification"`
+}
+
+type ConsumerOrProvider struct {
+	Name string `json:"name"`
 }
 
 type PactContract struct {
-	Consumer     string
-	Provider     string
-	Interactions []ProviderServiceInteraction
-	Metadata     PactContractMetadata
+	Consumer     ConsumerOrProvider           `json:"consumer"`
+	Provider     ConsumerOrProvider           `json:"provider"`
+	Interactions []ProviderServiceInteraction `json:"interactions"`
+	Metadata     PactContractMetadata         `json:"metadata"`
 }

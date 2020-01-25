@@ -5,7 +5,7 @@ go:
  - 1.10.3
  - tip
 
-# Looks like 'dep' isn't in the zenial PPAs
+# Looks like 'dep' isn't in the zenial PPAs - sadly this is the recommended installation procedure
 before_install:
   - curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
 

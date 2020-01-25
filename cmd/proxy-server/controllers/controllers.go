@@ -26,7 +26,7 @@ type fileWriter func(filename string, data []byte, perm os.FileMode) error
 type Dependencies struct {
 	HttpClient        IHttpClient
 	FileWriter        fileWriter
-	InteractionLookup domain.InteractionLookup
+	InteractionLookup *domain.InteractionLookup
 	CliArgs           *domain.CliArgs
 }
 
@@ -59,10 +59,10 @@ func passThrough(c *gin.Context, deps *Dependencies) (*http.Response, error) {
 	return response, nil
 }
 
-func (deps *Dependencies) handleInteractionDeleteInner(c *gin.Context) error {
+func (deps Dependencies) handleInteractionDeleteInner(c *gin.Context) error {
 	deps.InteractionLookup = domain.CreateEmptyInteractionLookup()
 
-	response, _ := passThrough(c, deps)
+	response, _ := passThrough(c, &deps)
 
 	resp := new(bytes.Buffer)
 	_, err := resp.ReadFrom(response.Body)
@@ -82,15 +82,15 @@ func (deps *Dependencies) handleInteractionDeleteInner(c *gin.Context) error {
 	return nil
 }
 
-func (deps *Dependencies) HandleInteractionDelete(c *gin.Context) {
+func (deps Dependencies) HandleInteractionDelete(c *gin.Context) {
 	err := deps.handleInteractionDeleteInner(c)
 	if err != nil {
 		_ = c.AbortWithError(500, err)
 	}
 }
 
-func (deps *Dependencies) handleGetVerificationInner(c *gin.Context) error {
-	response, _ := passThrough(c, deps)
+func (deps Dependencies) handleGetVerificationInner(c *gin.Context) error {
+	response, _ := passThrough(c, &deps)
 
 	resp := new(bytes.Buffer)
 	_, err := resp.ReadFrom(response.Body)
@@ -112,13 +112,13 @@ func (deps *Dependencies) handleGetVerificationInner(c *gin.Context) error {
 	return nil
 }
 
-func (deps *Dependencies) HandleGetVerification(c *gin.Context) {
+func (deps Dependencies) HandleGetVerification(c *gin.Context) {
 	err := deps.handleGetVerificationInner(c)
 	if err != nil {
 		_ = c.AbortWithError(500, err)
 	}
 }
-func (deps *Dependencies) handleInteractionAddInner(c *gin.Context) error {
+func (deps Dependencies) handleInteractionAddInner(c *gin.Context) error {
 	reqUrl, err := url.Parse(deps.CliArgs.RubyCoreUrl + c.Request.URL.Path)
 	if err != nil {
 		return err
@@ -140,16 +140,16 @@ func (deps *Dependencies) handleInteractionAddInner(c *gin.Context) error {
 		return err
 	}
 
-	var unmarshalledInteraction = new(serialization.ProviderServiceInteraction)
-	err = json.Unmarshal(jsonBytes, unmarshalledInteraction)
+	var unmarshalledInteraction = serialization.ProviderServiceInteraction{}
+	err = json.Unmarshal(jsonBytes, &unmarshalledInteraction)
 	if err != nil {
 		return err
 	}
 
-	urlIdentifier := domain.CreateUniqueInteractionIdentifierFromInteraction(unmarshalledInteraction)
+	urlIdentifier := domain.CreateUniqueInteractionIdentifierFromInteraction(&unmarshalledInteraction)
 	err = deps.InteractionLookup.Set(urlIdentifier, unmarshalledInteraction)
 	if err != nil {
-		return err
+		fmt.Printf("Interaction duplicate: %v\n", urlIdentifier)
 	}
 
 	resp := new(bytes.Buffer)
@@ -164,7 +164,7 @@ func (deps *Dependencies) handleInteractionAddInner(c *gin.Context) error {
 	return nil
 }
 
-func (deps *Dependencies) HandleInteractionAdd(c *gin.Context) {
+func (deps Dependencies) HandleInteractionAdd(c *gin.Context) {
 	err := deps.handleInteractionAddInner(c)
 	if err != nil {
 		_ = c.AbortWithError(500, err)
@@ -178,7 +178,7 @@ func queryStringWithLeadingQuestionmark(queryString string) string {
 	return "?" + queryString
 }
 
-func (deps *Dependencies) handleVerificationDynamicEndpointsInner(c *gin.Context) error {
+func (deps Dependencies) handleVerificationDynamicEndpointsInner(c *gin.Context) error {
 	// TODO: Support custom serialization of request body
 	reqBody, err := ioutil.ReadAll(c.Request.Body)
 	if err != nil {
@@ -203,19 +203,16 @@ func (deps *Dependencies) handleVerificationDynamicEndpointsInner(c *gin.Context
 	responseReader := response.Body.(io.Reader)
 	contentLength := response.ContentLength
 
-	fmt.Println(c.Request.URL.Path)
-	fmt.Println(deps.InteractionLookup)
 	interactionKey := domain.CreateUniqueInteractionIdentifier(
-		c.Request.Method,
+		strings.ToLower(c.Request.Method),
 		"/"+strings.TrimLeft(c.Request.URL.Path, "/"),
-		queryStringWithLeadingQuestionmark(c.Request.URL.RawQuery))
+		c.Request.URL.RawQuery)
 	lookedUpInteraction, success := deps.InteractionLookup.Get(interactionKey)
 	if !success {
 		return errors.New(fmt.Sprintf("Failed to look up interaction: %v", lookedUpInteraction))
 	}
-	if lookedUpInteraction.Response.Encoding.Type == "protobuf" {
-		fmt.Println("Doing conversion to proto")
-		msgDescriptor, err := descriptorlogic.GetMessageDescriptorFromBody(&lookedUpInteraction.Response.Encoding, c.Request.URL.Path)
+	if lookedUpInteraction.Response.Encoding != nil && lookedUpInteraction.Response.Encoding.Type == "protobuf" {
+		msgDescriptor, err := descriptorlogic.GetMessageDescriptorFromBody(lookedUpInteraction.Response.Encoding, c.Request.URL.Path)
 		if err != nil {
 			return err
 		}
@@ -248,7 +245,7 @@ func (deps *Dependencies) handleVerificationDynamicEndpointsInner(c *gin.Context
 		}
 	}
 
-	// ContentLength is set by DataFromReader below, and gin doesn't support overwritingof header values.
+	// ContentLength is set by DataFromReader below, and gin doesn't support overwriting of header values.
 	c.Writer.Header().Del("content-length")
 
 	c.DataFromReader(response.StatusCode, contentLength,
@@ -256,15 +253,16 @@ func (deps *Dependencies) handleVerificationDynamicEndpointsInner(c *gin.Context
 	return nil
 }
 
-func (deps *Dependencies) HandleVerificationDynamicEndpoints(c *gin.Context) {
+func (deps Dependencies) HandleVerificationDynamicEndpoints(c *gin.Context) {
 	err := deps.handleVerificationDynamicEndpointsInner(c)
 	if err != nil {
+		fmt.Println(err)
 		_ = c.AbortWithError(500, err)
 	}
 }
 
-func (deps *Dependencies) handleDynamicEndpointsInner(c *gin.Context) error {
-	ul, err := url.ParseRequestURI(deps.CliArgs.RubyCoreUrl + c.Request.URL.Path)
+func (deps Dependencies) handleDynamicEndpointsInner(c *gin.Context) error {
+	ul, err := url.ParseRequestURI(deps.CliArgs.RubyCoreUrl + c.Request.URL.Path + "?" + c.Request.URL.RawQuery)
 	if err != nil {
 		return err
 	}
@@ -286,9 +284,9 @@ func (deps *Dependencies) handleDynamicEndpointsInner(c *gin.Context) error {
 	}
 
 	interactionKey := domain.CreateUniqueInteractionIdentifier(
-		c.Request.Method,
+		strings.ToLower(c.Request.Method),
 		c.Request.URL.Path,
-		queryStringWithLeadingQuestionmark(c.Request.URL.RawQuery))
+		c.Request.URL.RawQuery)
 	lookedUpInteraction, success := deps.InteractionLookup.Get(interactionKey)
 	if !success {
 		return errors.New(fmt.Sprintf("Failed to look up interaction: %v", interactionKey))
@@ -299,8 +297,8 @@ func (deps *Dependencies) handleDynamicEndpointsInner(c *gin.Context) error {
 		return err
 	}
 
-	if lookedUpInteraction.Response.Encoding.Type == "protobuf" {
-		msgDescriptor, err := descriptorlogic.GetMessageDescriptorFromBody(&lookedUpInteraction.Response.Encoding, c.Request.URL.Path)
+	if lookedUpInteraction.Response.Encoding != nil && lookedUpInteraction.Response.Encoding.Type == "protobuf" {
+		msgDescriptor, err := descriptorlogic.GetMessageDescriptorFromBody(lookedUpInteraction.Response.Encoding, c.Request.URL.Path)
 		if err != nil {
 			return err
 		}
@@ -329,7 +327,7 @@ func (deps *Dependencies) handleDynamicEndpointsInner(c *gin.Context) error {
 	return nil
 }
 
-func (deps *Dependencies) HandleDynamicEndpoints(c *gin.Context) {
+func (deps Dependencies) HandleDynamicEndpoints(c *gin.Context) {
 	// TODO: Support custom serialization of request body
 	err := deps.handleDynamicEndpointsInner(c)
 	if err != nil {
@@ -337,8 +335,8 @@ func (deps *Dependencies) HandleDynamicEndpoints(c *gin.Context) {
 	}
 }
 
-func (deps *Dependencies) writePactToFileInner(c *gin.Context) error {
-	response, err := passThrough(c, deps)
+func (deps Dependencies) writePactToFileInner(c *gin.Context) error {
+	response, err := passThrough(c, &deps)
 	if err != nil {
 		return err
 	}
@@ -363,7 +361,9 @@ func (deps *Dependencies) writePactToFileInner(c *gin.Context) error {
 	}
 	// TODO: This is sensitive to there being a trailing '/' at the end of the PactDir, but otherwise *should* work on
 	// both unix and Windows
-	fileDest := deps.CliArgs.PactDir + contract.Consumer + ".proto.json"
+	consumerFilenameComponent := strings.ToLower(strings.ReplaceAll(contract.Consumer.Name, " ", "_"))
+	providerFilenameComponent := strings.ToLower(strings.ReplaceAll(contract.Provider.Name, " ", "_"))
+	fileDest := deps.CliArgs.PactDir + consumerFilenameComponent + "-" + providerFilenameComponent + ".proto.json"
 	_, err = fmt.Printf("Writing pact file to %s\n", fileDest)
 	if err != nil {
 		return err
@@ -377,7 +377,7 @@ func (deps *Dependencies) writePactToFileInner(c *gin.Context) error {
 	return nil
 }
 
-func (deps *Dependencies) WritePactToFile(c *gin.Context) {
+func (deps Dependencies) WritePactToFile(c *gin.Context) {
 	err := deps.writePactToFileInner(c)
 	if err != nil {
 		_ = c.AbortWithError(500, err)

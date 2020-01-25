@@ -9,28 +9,30 @@ import (
 var expectedDataStructure = &ProviderServiceInteraction{
 	Request: ProviderServiceRequest{
 		Method: "POST",
-		Path:   "foo/bar",
-		Query:  "?number=1",
-		Encoding: SerializationEncoding{
+		Path: &PossiblyRegexedString{
+			NoRegex: "foo/bar",
+		},
+		Query: &PossiblyRegexedString{NoRegex: "?number=1"},
+		Encoding: &SerializationEncoding{
 			Type: "protobuf",
 			Description: &ProtobufEncodingDescription{
 				MessageName:       "BarRequestMessage",
 				FileDescriptorSet: []float64{1, 2, 3},
 			},
 		},
-		Headers: map[string]string{"Accept": "application/octet-stream"},
+		Headers: map[string]interface{}{"Accept": "application/octet-stream"},
 		Body:    CreatePactRequestBody("{\"Key\":\"Value\"}"),
 	},
 	Response: ProviderServiceResponse{
 		Status: 200,
-		Encoding: SerializationEncoding{
+		Encoding: &SerializationEncoding{
 			Type: "protobuf",
 			Description: &ProtobufEncodingDescription{
 				MessageName:       "BarResponseMessage",
 				FileDescriptorSet: []float64{4, 5, 6},
 			},
 		},
-		Headers: map[string]string{"Accept": "application/octet-stream"},
+		Headers: map[string]interface{}{"Accept": "application/octet-stream"},
 		Body:    CreatePactRequestBody(""),
 	},
 }

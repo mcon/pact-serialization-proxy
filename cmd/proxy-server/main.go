@@ -13,37 +13,36 @@ import (
 	"github.com/mkideal/cli"
 )
 
-// Global application state
-var ParsedArgs = new(domain.CliArgs)
-var UrlResponseProtoMap = domain.InteractionLookup{}
-
 func main() {
+	var ParsedArgs = new(domain.CliArgs)
 	cli.Run(ParsedArgs, func(ctx *cli.Context) error {
 		ParsedArgs = ctx.Argv().(*domain.CliArgs)
+		interactionLookup := domain.CreateEmptyInteractionLookup()
 		if ParsedArgs.Verificaion {
-			loadInteractionsFromPactFile()
+			interactionLookup = loadInteractionsFromPactFile(ParsedArgs)
 		}
 
 		deps := controllers.RealDependencies(ParsedArgs)
+		deps.InteractionLookup = interactionLookup
 		return SetupRouter(deps).Run(fmt.Sprintf("%s:%d", ParsedArgs.Host, ParsedArgs.Port))
 	})
 }
 
-func loadInteractionsFromPactFile() {
-	dat, err := ioutil.ReadFile(ParsedArgs.PactDir)
+func loadInteractionsFromPactFile(args *domain.CliArgs) *domain.InteractionLookup {
+	dat, err := ioutil.ReadFile(args.PactDir)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
 
 	pactContract := serialization.PactContract{}
-	err = json.Unmarshal(dat, pactContract)
+	err = json.Unmarshal(dat, &pactContract)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
 
-	UrlResponseProtoMap = domain.CreateInteractionLookupFromContract(&pactContract)
+	return domain.CreateInteractionLookupFromContract(&pactContract)
 }
 
 func SetupRouter(deps *controllers.Dependencies) *gin.Engine {
@@ -52,7 +51,7 @@ func SetupRouter(deps *controllers.Dependencies) *gin.Engine {
 	r.GET("interactions/verification", deps.HandleGetVerification)
 	r.POST("interactions", deps.HandleInteractionAdd)
 	r.POST("pact", deps.WritePactToFile)
-	if ParsedArgs.Verificaion {
+	if deps.CliArgs.Verificaion {
 		r.NoRoute(deps.HandleVerificationDynamicEndpoints)
 	} else {
 		r.NoRoute(deps.HandleDynamicEndpoints)
