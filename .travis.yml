@@ -17,7 +17,7 @@ script:
 jobs:
  include:
   - stage: deploy
-    go: 1.10.3
+    go: 1.12.5
     before_deploy:
       - ls; pwd
     deploy:
